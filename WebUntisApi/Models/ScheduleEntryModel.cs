@@ -5,5 +5,6 @@
         public string? SubjectName { get; set; }
         public string? RoomNumber { get; set; }
         public string? DayOfWeek { get; set; }
+        public string? Status { get; set; }
     }
 }
