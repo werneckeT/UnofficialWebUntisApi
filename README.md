@@ -10,7 +10,6 @@ This .NET integration allows easy access to scheduling information from WebUntis
 - Retrieve current and specific week schedules for classes.
 - Configurable WebUntis URL to adapt to different schools.
 - Built-in logging for monitoring and debugging.
-- Secure handling of credentials and session data.
 
 ## Configuration
 Update your `appsettings.json` with the WebUntis URL of your school:
