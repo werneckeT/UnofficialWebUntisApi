@@ -2,6 +2,6 @@
 {
     public class WebUntisWeekModel
     {
-        public List<WebUntisDayModel>? Days { get; set; }
+        public List<WebUntisDayModel>? Days { get; init; }
     }
 }
