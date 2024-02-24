@@ -1,6 +1,6 @@
-﻿namespace WebUntisApi.Models
+﻿namespace WebUntisApi.Models.Enums
 {
-    public enum SchoolDayEnum
+    public enum WebUntisSchoolDayEnum
     {
         Monday,
         Tuesday,

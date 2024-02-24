@@ -15,20 +15,10 @@ namespace WebUntisApi.Controllers
         }
 
         [HttpGet]
-        public async Task<WeekModel> GetCurrentWeekSchedule([FromQuery] string cookieKey, [FromQuery] int classId)
+        public async Task<WebUntisWeekModel> GetCurrentWeekSchedule([FromQuery] string cookieKey, [FromQuery] int classId)
         {
             var result = await _client.RetrieveClassData(cookieKey, classId);
             return result;
         }
-
-        //[HttpGet]
-        //public async Task<List<ScheduleEntryModel>> GetClassSubjectsByDate([FromQuery] string cookieKey, [FromQuery] int classId, [FromQuery] DateTime date)
-        //{
-        //    var weekSchedule = await _client.RetrieveClassData(cookieKey, classId);
-
-        //    //var dateSchedule = weekSchedule.Where(x => x.StartTime != null && x.StartTime.Value.Date == date.Date).ToList();
-
-        //    return dateSchedule;
-        //}
     }
 }

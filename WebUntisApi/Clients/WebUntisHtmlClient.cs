@@ -6,6 +6,7 @@ using OpenQA.Selenium;
 using SeleniumExtras.WaitHelpers;
 using WebUntisApi.Models;
 using System.Text.RegularExpressions;
+using WebUntisApi.Models.Enums;
 
 namespace WebUntisApi.Clients
 {
@@ -17,41 +18,27 @@ namespace WebUntisApi.Clients
         private const string WebUntisUrl =
             "https://tipo.webuntis.com/WebUntis/?school=BBS+III+Magdeburg#/basic/timetable";
 
-        public Task<WeekModel> RetrieveClassData(string cookieKey, int classId)
+        public Task<WebUntisWeekModel> RetrieveClassData(string cookieKey, int classId)
         {
             var untisContent = SeleniumReadContent(cookieKey, classId);
             var weekModel = Parse(untisContent);
             return Task.FromResult(weekModel);
         }
 
-        public static async Task PrintData()
+        private static WebUntisWeekModel Parse(string content)
         {
-            var untisContent = SeleniumReadContent();
-            var weekModel = Parse(untisContent);
-            foreach (var day in weekModel.Days ?? new List<DayModel>())
-            {
-                Console.WriteLine($"Day: {day.SchoolDay}");
-                foreach (var subject in day.Subjects ?? new List<SubjectModel>())
-                {
-                    Console.WriteLine($"Subject: {subject.Name}, Room: {subject.Room}, Time: {subject.StartTime}, Info: {subject.AdditionalInformation}");
-                }
-            }
-        }
-
-        private static WeekModel Parse(string content)
-        {
-            var week = new WeekModel { Days = new List<DayModel>() };
+            var week = new WebUntisWeekModel { Days = new List<WebUntisDayModel>() };
             var htmlDoc = new HtmlDocument();
             htmlDoc.LoadHtml(content);
             var containerNode = htmlDoc.DocumentNode.SelectSingleNode(HtmlContentXPath);
 
-            var dayMapping = new Dictionary<string, SchoolDayEnum>
+            var dayMapping = new Dictionary<string, WebUntisSchoolDayEnum>
             {
-                {"Monday", SchoolDayEnum.Monday},
-                {"Tuesday", SchoolDayEnum.Tuesday},
-                {"Wednesday", SchoolDayEnum.Wednesday},
-                {"Thursday", SchoolDayEnum.Thursday},
-                {"Friday", SchoolDayEnum.Friday},
+                {"Monday", WebUntisSchoolDayEnum.Monday},
+                {"Tuesday", WebUntisSchoolDayEnum.Tuesday},
+                {"Wednesday", WebUntisSchoolDayEnum.Wednesday},
+                {"Thursday", WebUntisSchoolDayEnum.Thursday},
+                {"Friday", WebUntisSchoolDayEnum.Friday},
             };
 
             var linkNodes = containerNode?.SelectNodes(".//a");
@@ -68,7 +55,7 @@ namespace WebUntisApi.Clients
                 var dayOfWeekStr = date.Value.ToString("dddd", CultureInfo.InvariantCulture);
                 if (!dayMapping.TryGetValue(dayOfWeekStr, out var schoolDay))
                 {
-                    schoolDay = SchoolDayEnum.Unknown;
+                    schoolDay = WebUntisSchoolDayEnum.Unknown;
                 }
 
                 var entryDiv = linkNode.SelectSingleNode(".//div[contains(@class,'renderedEntry')]");
@@ -80,22 +67,22 @@ namespace WebUntisApi.Clients
                 var style = entryDiv.GetAttributeValue("style", string.Empty);
                 var status = DetermineStatusFromStyle(style);
 
-                var subjectModel = new SubjectModel
+                var subjectModel = new WebUntisRenderEntryModel
                 {
                     Name = subjectName,
                     Room = roomNumber,
                     StartTime = extractedStartTime,
                     EndTime = extractedEndTime,
-                    AdditionalInformation = status
+                    RenderEntryStatus = status
                 };
 
-                var dayModel = week.Days.FirstOrDefault(d => d.SchoolDay == schoolDay);
+                var dayModel = week.Days.FirstOrDefault(d => d.WebUntisSchoolDay == schoolDay);
                 if (dayModel == null)
                 {
-                    dayModel = new DayModel
+                    dayModel = new WebUntisDayModel
                     {
-                        SchoolDay = schoolDay,
-                        Subjects = new List<SubjectModel>()
+                        WebUntisSchoolDay = schoolDay,
+                        Subjects = new List<WebUntisRenderEntryModel>()
                     };
                     week.Days.Add(dayModel);
                 }
@@ -143,13 +130,12 @@ namespace WebUntisApi.Clients
             }
         }
 
-        private static string DetermineStatusFromStyle(string style)
+        private static WebUntisRenderEntryStatusEnum DetermineStatusFromStyle(string style)
         {
-            // Extracting the background-color value
             var regex = DetermineStatusRegex();
             var match = regex.Match(style);
-            if (!match.Success) 
-                return "Unknown";
+            if (!match.Success)
+                return WebUntisRenderEntryStatusEnum.Unknown; // Assuming 'Unknown' is a valid enum value
 
             var r = int.Parse(match.Groups[1].Value);
             var g = int.Parse(match.Groups[2].Value);
@@ -157,10 +143,10 @@ namespace WebUntisApi.Clients
 
             return r switch
             {
-                152 when g == 251 && b == 152 => "Takes Place",
-                153 when g == 50 && b == 204 => "Dropped",
-                240 when g == 128 && b == 128 => "Changed",
-                _ => "Unknown"
+                152 when g == 251 && b == 152 => WebUntisRenderEntryStatusEnum.TakesPlace,
+                153 when g == 50 && b == 204 => WebUntisRenderEntryStatusEnum.Dropped,
+                240 when g == 128 && b == 128 => WebUntisRenderEntryStatusEnum.Changed,
+                _ => WebUntisRenderEntryStatusEnum.Unknown
             };
         }
 
