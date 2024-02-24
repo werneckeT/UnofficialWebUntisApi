@@ -6,6 +6,7 @@
         Tuesday,
         Wednesday,
         Thursday,
-        Friday
+        Friday,
+        Unknown
     }
 }

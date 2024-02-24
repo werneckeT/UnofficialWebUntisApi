@@ -17,67 +17,94 @@ namespace WebUntisApi.Clients
         private const string WebUntisUrl =
             "https://tipo.webuntis.com/WebUntis/?school=BBS+III+Magdeburg#/basic/timetable";
 
-        public Task<List<ScheduleEntryModel>> RetrieveClassData(int classId)
+        public Task<WeekModel> RetrieveClassData(string cookieKey, int classId)
         {
-            var untisContent = SeleniumReadContent(classId);
-            var entries = Parse(untisContent);
-            return Task.FromResult(entries);
+            var untisContent = SeleniumReadContent(cookieKey, classId);
+            var weekModel = Parse(untisContent);
+            return Task.FromResult(weekModel);
         }
 
-        public static async Task<List<ScheduleEntryModel>> PrintData()
+        public static async Task PrintData()
         {
             var untisContent = SeleniumReadContent();
-            var entries = Parse(untisContent);
-            foreach (var entry in entries)
+            var weekModel = Parse(untisContent);
+            foreach (var day in weekModel.Days ?? new List<DayModel>())
             {
-                Console.WriteLine($"Day: {entry.DayOfWeek}, Subject: {entry.SubjectName}, Room: {entry.RoomNumber}, Status: {entry.Status}, Start: {entry.StartTime}, End: {entry.EndTime}");
+                Console.WriteLine($"Day: {day.SchoolDay}");
+                foreach (var subject in day.Subjects ?? new List<SubjectModel>())
+                {
+                    Console.WriteLine($"Subject: {subject.Name}, Room: {subject.Room}, Time: {subject.StartTime}, Info: {subject.AdditionalInformation}");
+                }
             }
-
-            return entries;
         }
 
-        private static List<ScheduleEntryModel> Parse(string content)
+        private static WeekModel Parse(string content)
         {
+            var week = new WeekModel { Days = new List<DayModel>() };
             var htmlDoc = new HtmlDocument();
             htmlDoc.LoadHtml(content);
             var containerNode = htmlDoc.DocumentNode.SelectSingleNode(HtmlContentXPath);
+
+            var dayMapping = new Dictionary<string, SchoolDayEnum>
+            {
+                {"Monday", SchoolDayEnum.Monday},
+                {"Tuesday", SchoolDayEnum.Tuesday},
+                {"Wednesday", SchoolDayEnum.Wednesday},
+                {"Thursday", SchoolDayEnum.Thursday},
+                {"Friday", SchoolDayEnum.Friday},
+            };
+
             var linkNodes = containerNode?.SelectNodes(".//a");
 
             if (linkNodes == null)
-                return new List<ScheduleEntryModel>();
-
-            var entries = new List<ScheduleEntryModel>();
+                return week;
 
             foreach (var linkNode in linkNodes)
             {
                 var href = linkNode.GetAttributeValue("href", "");
-                var (date, startTime, endTime) = ExtractDateTimeFromHref(href);
-                if (!date.HasValue) continue; // Skip if no valid date is found
+                var (date, extractedStartTime, extractedEndTime) = ExtractDateTimeFromHref(href);
+                if (!date.HasValue) continue;
+
+                var dayOfWeekStr = date.Value.ToString("dddd", CultureInfo.InvariantCulture);
+                if (!dayMapping.TryGetValue(dayOfWeekStr, out var schoolDay))
+                {
+                    schoolDay = SchoolDayEnum.Unknown;
+                }
 
                 var entryDiv = linkNode.SelectSingleNode(".//div[contains(@class,'renderedEntry')]");
                 var spans = entryDiv?.SelectNodes(".//span");
-
-                if (spans is not { Count: >= 1 })
-                    continue;
+                if (spans is null || entryDiv == null) continue;
 
                 var subjectName = spans[0].InnerText.Trim();
                 var roomNumber = spans.Count > 1 ? spans[1].InnerText.Trim() : string.Empty;
                 var style = entryDiv.GetAttributeValue("style", string.Empty);
-                var status = DetermineStatusFromStyle(style); // Determine status based on style
-                
-                if (endTime != null && startTime != null)
-                    entries.Add(new ScheduleEntryModel
+                var status = DetermineStatusFromStyle(style);
+
+                var subjectModel = new SubjectModel
+                {
+                    Name = subjectName,
+                    Room = roomNumber,
+                    StartTime = extractedStartTime,
+                    EndTime = extractedEndTime,
+                    AdditionalInformation = status
+                };
+
+                var dayModel = week.Days.FirstOrDefault(d => d.SchoolDay == schoolDay);
+                if (dayModel == null)
+                {
+                    dayModel = new DayModel
                     {
-                        SubjectName = subjectName,
-                        RoomNumber = roomNumber,
-                        DayOfWeek = date.Value.ToString("dddd", CultureInfo.InvariantCulture),
-                        Status = status,
-                        StartTime = startTime.Value,
-                        EndTime = endTime.Value
-                    });
+                        SchoolDay = schoolDay,
+                        Subjects = new List<SubjectModel>()
+                    };
+                    week.Days.Add(dayModel);
+                }
+
+                dayModel.Subjects?.Add(subjectModel);
+                dayModel.Subjects = dayModel.Subjects?.OrderBy(s => s.StartTime).ToList();
             }
 
-            return entries;
+            return week;
         }
 
         private static (DateTime? Date, DateTime? StartTime, DateTime? EndTime) ExtractDateTimeFromHref(string href)
@@ -116,24 +143,10 @@ namespace WebUntisApi.Clients
             }
         }
 
-
-
-        private static DateTime? ExtractDateFromHref(string href)
-        {
-            var regex = ExtractDateRegex();
-            var match = regex.Match(href);
-
-            if (match.Success && DateTime.TryParse(match.Groups[1].Value, out var date))
-            {
-                return date;
-            }
-            return null;
-        }
-
         private static string DetermineStatusFromStyle(string style)
         {
             // Extracting the background-color value
-            var regex = new Regex(@"background-color: rgba\((\d+), (\d+), (\d+), (\d*\.?\d+)\)");
+            var regex = DetermineStatusRegex();
             var match = regex.Match(style);
             if (!match.Success) 
                 return "Unknown";
@@ -144,23 +157,20 @@ namespace WebUntisApi.Clients
 
             return r switch
             {
-                // Status: Takes Place - Light Green
                 152 when g == 251 && b == 152 => "Takes Place",
-                // Status: Dropped - Purple
                 153 when g == 50 && b == 204 => "Dropped",
-                // Status: Teacher missing - Light Coral
                 240 when g == 128 && b == 128 => "Changed",
                 _ => "Unknown"
             };
         }
 
-        private static string SeleniumReadContent(int classId = 2974)
+        private static string SeleniumReadContent(string cookieKey = "timetable-state-BBS III Magdeburg-1", int classId = 2974)
         {
             using IWebDriver driver = new ChromeDriver();
             driver.Navigate().GoToUrl(WebUntisUrl);
 
             ((IJavaScriptExecutor)driver).ExecuteScript(
-                $"localStorage.setItem('timetable-state-BBS III Magdeburg-1', JSON.stringify({{\"id\":{classId},\"formatId\":4}}));");
+                $"localStorage.setItem('{cookieKey}', JSON.stringify({{\"id\":{classId},\"formatId\":4}}));");
             driver.Navigate().Refresh();
 
             var wait = new WebDriverWait(driver, TimeSpan.FromSeconds(10));
@@ -173,7 +183,7 @@ namespace WebUntisApi.Clients
             return pageContent;
         }
 
-        [GeneratedRegex(@"(\d{4}-\d{2}-\d{2})T")]
-        private static partial Regex ExtractDateRegex();
+        [GeneratedRegex(@"background-color: rgba\((\d+), (\d+), (\d+), (\d*\.?\d+)\)")]
+        private static partial Regex DetermineStatusRegex();
     }
 }
