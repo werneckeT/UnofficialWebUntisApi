@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using HtmlAgilityPack;
 using OpenQA.Selenium.Chrome;
 using OpenQA.Selenium.Support.UI;
@@ -20,6 +20,11 @@ namespace WebUntisApi.Clients
         private readonly string _prevWeekButtonXPath;
         private readonly string _webUntisUrl;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="WebUntisHtmlClient"/> class.
+        /// </summary>
+        /// <param name="configuration">The configuration.</param>
+        /// <param name="logger">The logger.</param>
         public WebUntisHtmlClient(IConfiguration configuration, ILogger<WebUntisHtmlClient> logger)
         {
             _logger = logger;
@@ -32,6 +37,12 @@ namespace WebUntisApi.Clients
         }
 
         // Public Methods
+        /// <summary>
+        /// Retrieves a web untis week model asynchronously based on the provided cookie key and class id.
+        /// </summary>
+        /// <param name="cookieKey">The cookie key to authenticate the request.</param>
+        /// <param name="classId">The ID of the class for which data should be retrieved.</param>
+        /// <returns>A task that resolves with a WebUntisWeekModel instance, containing the retrieved class data.</returns>
         public Task<WebUntisWeekModel> RetrieveClassDataAsync(string cookieKey, int classId)
         {
             var untisContent = SeleniumReadContent(cookieKey, classId);
@@ -39,6 +50,13 @@ namespace WebUntisApi.Clients
             return Task.FromResult(weekModel);
         }
 
+        /// <summary>
+        /// Retrieves class data for a specified week from WebUntis.
+        /// </summary>
+        /// <param name="cookieKey">The cookie key used for authentication.</param>
+        /// <param name="classId">The ID of the class to retrieve data for.</param>
+        /// <param name="weekOffset">The offset of the week to retrieve data for (0-based).</param>
+        /// <returns>A Task that resolves with a WebUntisWeekModel instance containing the retrieved class data.</returns>
         public Task<WebUntisWeekModel> RetrieveClassDataForWeekAsync(string cookieKey, int classId, int weekOffset)
         {
             var untisContent = SeleniumReadContent(cookieKey, classId, weekOffset);
@@ -46,6 +64,12 @@ namespace WebUntisApi.Clients
         }
 
         //Selenium Interactions
+        /// <summary>
+        /// Reads the content of the Selenium web driver for a given class ID and week offset.
+        /// </summary>
+        /// <param name="cookieKey">The key for the cookie to be set.</param>
+        /// <param name="classId">The ID of the class.</param>
+        /// <param name="weekOffset">Optional offset for navigating to a specific week (default is 0).</param>
         private string SeleniumReadContent(string cookieKey, int classId, int weekOffset = 0)
         {
             var chromeOptions = new ChromeOptions();
@@ -84,6 +108,7 @@ namespace WebUntisApi.Clients
             return pageContent;
         }
 
+        /// Navigates to the specified week by clicking next or previous buttons accordingly.
         private void NavigateToWeek(IWebDriver driver, int weekOffset)
         {
             for (var i = 0; i < Math.Abs(weekOffset); i++)
@@ -103,6 +128,11 @@ namespace WebUntisApi.Clients
         }
 
         // Data Processing
+        /// <summary>
+        /// Parses the provided WebUntis content and populates a WebUntisWeekModel with the extracted data.
+        /// </summary>
+        /// <param name="content">The WebUntis content to be parsed.</param>
+        /// <returns>A populated WebUntisWeekModel object.</returns>
         private WebUntisWeekModel ParseWebUntisContent(string content)
         {
             try
@@ -129,6 +159,12 @@ namespace WebUntisApi.Clients
             }
         }
 
+        /// <summary>
+        /// Processes a link node in an HTML document representing a week of school days.
+        /// </summary>
+        /// <param name="linkNode">The link node to process.</param>
+        /// <param name="week">The model representing the week of school days.</param>
+        /// <param name="dayMapping">A dictionary mapping day of the week strings to WebUntisSchoolDayEnum values.</param>
         private void ProcessLinkNode(HtmlNode linkNode, WebUntisWeekModel week, IReadOnlyDictionary<string, WebUntisSchoolDayEnum> dayMapping)
         {
             var (date, extractedStartTime, extractedEndTime) = ExtractDateTimeFromHref(linkNode.GetAttributeValue("href", string.Empty));
@@ -150,6 +186,13 @@ namespace WebUntisApi.Clients
                 AddSubjectToWeekModel(week, schoolDay, subjectModel);
         }
 
+        /// <summary>
+        /// Extracts a WebUntisRenderEntryModel from an HTML entry div.
+        /// </summary>
+        /// <param name="entryDiv">The HTML entry div to extract the model from.</param>
+        /// <param name="startTime">The start time of the entry, or null if unknown.</param>
+        /// <param name="endTime">The end time of the entry, or null if unknown.</param>
+        /// <returns>A WebUntisRenderEntryModel representing the extracted data, or null if unable to extract.</returns>
         private static WebUntisRenderEntryModel? ExtractSubjectModelFromEntry(HtmlNode entryDiv, DateTime? startTime, DateTime? endTime)
         {
             var spans = entryDiv.SelectNodes(".//span");
@@ -172,6 +215,10 @@ namespace WebUntisApi.Clients
         }
 
         // Utility Methods
+        /// <summary>
+        /// Returns a dictionary mapping day names to their corresponding enum values.
+        /// </summary>
+        /// <returns>A dictionary containing day names as keys and their corresponding enum values as values.</returns>
         private static Dictionary<string, WebUntisSchoolDayEnum> GetDayMapping()
         {
             return new Dictionary<string, WebUntisSchoolDayEnum>
@@ -184,6 +231,12 @@ namespace WebUntisApi.Clients
             };
         }
 
+        /// <summary>
+        /// Adds a subject to the week model for the specified school day.
+        /// </summary>
+        /// <param name="week">The week model.</param>
+        /// <param name="schoolDay">The school day enum.</param>
+        /// <param name="subjectModel">The subject model.</param>
         private static void AddSubjectToWeekModel(WebUntisWeekModel week, WebUntisSchoolDayEnum schoolDay, WebUntisRenderEntryModel subjectModel)
         {
             if (week.Days == null) 
@@ -207,6 +260,11 @@ namespace WebUntisApi.Clients
         }
 
         // Extraction & Conversion
+        /// <summary>
+        /// Extracts date and time from a given URI href.
+        /// </summary>
+        /// <param name="href">The URI href to extract the date and time from.</param>
+        /// <returns>A tuple containing the start date, start time, and end time as DateTime objects, or (null, null, null) if extraction fails.</returns>
         private (DateTime? Date, DateTime? StartTime, DateTime? EndTime) ExtractDateTimeFromHref(string href)
         {
             try
@@ -241,6 +299,16 @@ namespace WebUntisApi.Clients
             }
         }
 
+        /// Determines the status of an entry from a given style string.
+        ///
+        /// This method uses regular expressions to extract values from the input style string and then
+        /// matches these values against specific conditions to determine the corresponding entry status.
+        ///
+        /// Parameters:
+        /// <param name="style">The style string to parse.</param>
+        ///
+        /// Returns:
+        /// The determined entry status as a WebUntisRenderEntryStatusEnum value.
         private static WebUntisRenderEntryStatusEnum DetermineStatusFromStyle(string style)
         {
             var regex = DetermineStatusRegex();
